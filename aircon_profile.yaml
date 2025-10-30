@@ -151,7 +151,7 @@ actions:
             id: manual_reset
           - condition: template
             value_template: >
-              {{ states(profile_select_var) != none_option }}
+              {{ states(profile_select_var) != none_option and states(profile_select_var) not in ['unknown', 'unavailable'] }}
           - condition: template
             value_template: >
               {% if last_apply is not none %}
