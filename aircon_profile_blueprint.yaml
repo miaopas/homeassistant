@@ -1,0 +1,168 @@
+blueprint:
+  name: 空调档位控制蓝图（动态档位版）
+  description: >
+    根据自定义档位自动设置空调参数，支持任意数量的档位配置。
+
+    功能特性：
+    - 支持无限数量的自定义档位（睡眠、普通、强力、静音等）
+    - 手动调整空调后自动重置档位选择器
+    - 可配置的重置延迟时间
+    - 灵活的配置方式，每个空调可以有不同的档位
+
+    使用前需要先创建：
+    1. input_select 档位选择器（在 Dashboard 显示为下拉菜单）
+
+    档位参数直接在蓝图配置中定义，无需创建额外的helper实体！
+  domain: automation
+  input:
+    ac_entity:
+      name: 空调设备
+      description: 选择需要控制的空调设备
+      selector:
+        entity:
+          domain: climate
+
+    profile_select:
+      name: 档位选择器
+      description: 选择档位控制的 input_select 实体
+      selector:
+        entity:
+          domain: input_select
+
+    none_option:
+      name: 空档值
+      description: input_select 中代表"无"状态的选项文字
+      default: 无
+      selector:
+        text:
+
+    reset_delay:
+      name: 重置延迟（秒）
+      description: 手动调整空调后多少秒才会重置档位选择器（避免应用档位时误触发）
+      default: 10
+      selector:
+        number:
+          min: 5
+          max: 60
+          step: 1
+          unit_of_measurement: 秒
+
+    profiles:
+      name: 档位配置列表
+      description: >
+        定义各个档位及其固定参数值。
+        格式：档位名称=温度,风速,模式
+
+        示例：
+        睡眠=27,low,cool
+        普通=26,auto,cool
+        强力=16,high,cool
+        静音=28,low,cool
+      default: |
+        睡眠=27,low,cool
+        普通=26,auto,cool
+        强力=16,high,cool
+      selector:
+        text:
+          multiline: true
+
+mode: single
+
+triggers:
+  - platform: state
+    entity_id: !input profile_select
+    id: apply_profile
+
+  - platform: state
+    entity_id: !input ac_entity
+    attribute: temperature
+    id: manual_reset
+
+  - platform: state
+    entity_id: !input ac_entity
+    attribute: fan_mode
+    id: manual_reset
+
+  - platform: state
+    entity_id: !input ac_entity
+    attribute: hvac_mode
+    id: manual_reset
+
+variables:
+  ac_entity_var: !input ac_entity
+  profile_select_var: !input profile_select
+  none_option: !input none_option
+  reset_delay: !input reset_delay
+  profiles_config: !input profiles
+  current_profile: "{{ states(profile_select_var) }}"
+  last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
+
+  # 解析档位配置
+  profiles_dict: >
+    {% set ns = namespace(result={}) %}
+    {% for line in profiles_config.split('\n') %}
+      {% if '=' in line %}
+        {% set parts = line.split('=') %}
+        {% set profile_name = parts[0].strip() %}
+        {% set values = parts[1].split(',') %}
+        {% set ns.result = dict(ns.result, **{profile_name: {
+          'temp': values[0].strip() | float,
+          'fan': values[1].strip(),
+          'mode': values[2].strip()
+        }}) %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.result }}
+
+actions:
+  - choose:
+      # 应用档位设置
+      - conditions:
+          - condition: trigger
+            id: apply_profile
+          - condition: template
+            value_template: "{{ current_profile != none_option and current_profile not in ['unknown', 'unavailable'] }}"
+        sequence:
+          - variables:
+              profile_config: "{{ profiles_dict.get(current_profile, none) }}"
+
+          - condition: template
+            value_template: "{{ profile_config is not none }}"
+
+          - service: climate.set_temperature
+            target:
+              entity_id: !input ac_entity
+            data:
+              temperature: "{{ profile_config.temp }}"
+
+          - service: climate.set_fan_mode
+            target:
+              entity_id: !input ac_entity
+            data:
+              fan_mode: "{{ profile_config.fan }}"
+
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input ac_entity
+            data:
+              hvac_mode: "{{ profile_config.mode }}"
+
+      # 手动修改后重置
+      - conditions:
+          - condition: trigger
+            id: manual_reset
+          - condition: template
+            value_template: "{{ current_profile != none_option and current_profile not in ['unknown', 'unavailable'] }}"
+          - condition: template
+            value_template: |
+              {% if last_apply is not none %}
+                {{ (as_timestamp(now()) - as_timestamp(last_apply)) > reset_delay }}
+              {% else %}
+                true
+              {% endif %}
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input profile_select
+            data:
+              option: "{{ none_option }}"

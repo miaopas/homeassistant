@@ -1,0 +1,134 @@
+# ============================================
+# 空调档位助手实体配置（简化版）
+# ============================================
+#
+# 使用方法:
+# 1. 复制下面的内容到 configuration.yaml
+# 2. 修改为你的空调名称和选项
+# 3. 重启 Home Assistant
+# 4. 使用 aircon_profile_blueprint.yaml 创建自动化
+#
+# 注意：你只需要创建 input_select 档位选择器！
+#       温度、风速、模式等参数直接在蓝图中配置。
+# ============================================
+
+input_select:
+  # 主卧空调档位选择器
+  master_bedroom_ac_profile:
+    name: 主卧空调档位
+    options:
+      - 无          # 必须有一个"无"选项（或其他你定义的空档值）
+      - 睡眠
+      - 普通
+      - 强力
+      - 静音
+      # 添加更多档位只需在这里添加，然后在蓝图配置中定义参数
+    initial: 无
+    icon: mdi:air-conditioner
+
+  # 客厅空调档位选择器
+  living_room_ac_profile:
+    name: 客厅空调档位
+    options:
+      - 无
+      - 舒适
+      - 省电
+      - 制热
+    initial: 无
+    icon: mdi:air-conditioner
+
+  # 儿童房空调档位选择器
+  kids_room_ac_profile:
+    name: 儿童房空调档位
+    options:
+      - 无
+      - 白天
+      - 夜晚
+    initial: 无
+    icon: mdi:air-conditioner
+
+
+# ============================================
+# 蓝图配置示例
+# ============================================
+# 创建上述实体后，在使用蓝图时这样配置：
+#
+# === 主卧空调配置 ===
+# ac_entity: climate.master_bedroom_ac
+# profile_select: input_select.master_bedroom_ac_profile
+# none_option: 无
+# reset_delay: 10
+# profiles: |
+#   睡眠=27,low,cool
+#   普通=26,auto,cool
+#   强力=16,high,cool
+#   静音=28,low,cool
+#
+# === 客厅空调配置 ===
+# ac_entity: climate.living_room_ac
+# profile_select: input_select.living_room_ac_profile
+# none_option: 无
+# reset_delay: 10
+# profiles: |
+#   舒适=25,auto,cool
+#   省电=28,low,cool
+#   制热=22,auto,heat
+#
+# === 儿童房空调配置 ===
+# ac_entity: climate.kids_room_ac
+# profile_select: input_select.kids_room_ac_profile
+# none_option: 无
+# reset_delay: 10
+# profiles: |
+#   白天=26,auto,cool
+#   夜晚=27,low,cool
+
+
+# ============================================
+# Dashboard 卡片配置示例
+# ============================================
+# 最简单的配置 - 只显示档位选择器：
+#
+# type: entities
+# title: 空调控制
+# entities:
+#   - entity: input_select.master_bedroom_ac_profile
+#     name: 主卧空调
+#   - entity: input_select.living_room_ac_profile
+#     name: 客厅空调
+#   - entity: input_select.kids_room_ac_profile
+#     name: 儿童房空调
+#
+# ============================================
+# 或者更详细的卡片配置：
+#
+# type: vertical-stack
+# cards:
+#   - type: entities
+#     title: 主卧空调
+#     entities:
+#       - entity: input_select.master_bedroom_ac_profile
+#         name: 档位选择
+#       - entity: climate.master_bedroom_ac
+#         name: 空调状态
+#   - type: markdown
+#     content: |
+#       **档位说明：**
+#       - 睡眠：27°C, 低风速, 制冷
+#       - 普通：26°C, 自动风速, 制冷
+#       - 强力：16°C, 高风速, 制冷
+#       - 静音：28°C, 低风速, 制冷
+
+
+# ============================================
+# 常见风速选项（fan_mode）
+# ============================================
+# 常见值: auto, low, medium, high, silent, turbo
+# 具体支持哪些值取决于你的空调设备
+
+
+# ============================================
+# 常见模式选项（hvac_mode）
+# ============================================
+# 常见值: off, heat, cool, heat_cool, dry, fan_only, auto
+# 具体支持哪些值取决于你的空调设备
