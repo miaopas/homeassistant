@@ -47,6 +47,20 @@ blueprint:
           step: 1
           unit_of_measurement: 秒
 
+    enable_turn_off:
+      name: 启用关闭功能
+      description: 是否添加"关闭"档位功能（选择后直接关闭空调）
+      default: false
+      selector:
+        boolean:
+
+    turn_off_option:
+      name: 关闭档位名称
+      description: input_select 中代表"关闭空调"的选项文字（仅在启用关闭功能时有效）
+      default: 关闭
+      selector:
+        text:
+
     profiles:
       name: 档位配置列表
       description: >
@@ -93,6 +107,8 @@ variables:
   profile_select_var: !input profile_select
   none_option: !input none_option
   reset_delay: !input reset_delay
+  enable_turn_off: !input enable_turn_off
+  turn_off_option: !input turn_off_option
   profiles_config: !input profiles
   current_profile: "{{ states(profile_select_var) }}"
   last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
@@ -116,6 +132,19 @@ variables:
 
 actions:
   - choose:
+      # 关闭空调
+      - conditions:
+          - condition: trigger
+            id: apply_profile
+          - condition: template
+            value_template: "{{ enable_turn_off }}"
+          - condition: template
+            value_template: "{{ current_profile == turn_off_option }}"
+        sequence:
+          - service: climate.turn_off
+            target:
+              entity_id: !input ac_entity
+
       # 应用档位设置
       - conditions:
           - condition: trigger
