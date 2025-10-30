@@ -71,12 +71,15 @@ triggers:
     id: manual_reset
 
 variables:
-  profile: "{{ states(profile_select) }}"
+  ac_entity_var: !input ac_entity
+  profile_select_var: !input profile_select
   none_option: !input none_option
-  last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
   profile_sleep: !input profile_sleep
   profile_normal: !input profile_normal
   profile_power: !input profile_power
+  last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
+  profile: "{{ states(profile_select_var) }}"
+
 
 conditions: []
 
