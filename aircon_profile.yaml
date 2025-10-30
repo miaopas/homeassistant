@@ -1,5 +1,5 @@
 blueprint:
-  name: 空调档位控制蓝图
+  name: 空调档位控制蓝图（修正版）
   description: >
     根据 input_select 选择自动设置空调参数，并在手动调整空调后重置选择器。
   domain: automation
@@ -51,12 +51,9 @@ blueprint:
 mode: single
 
 triggers:
-  # 触发条件1：input_select 变化 → 应用档位设置
   - platform: state
     entity_id: !input profile_select
     id: apply_profile
-
-  # 触发条件2：空调被手动修改 → 重置档位为“无”
   - platform: state
     entity_id: !input ac_entity
     attribute: temperature
@@ -79,7 +76,6 @@ variables:
   profile_power: !input profile_power
   last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
   profile: "{{ states(profile_select_var) }}"
-
 
 conditions: []
 
@@ -155,7 +151,7 @@ actions:
             id: manual_reset
           - condition: template
             value_template: >
-              {{ states(profile_select) != none_option }}
+              {{ states(profile_select_var) != none_option }}
           - condition: template
             value_template: >
               {% if last_apply is not none %}
