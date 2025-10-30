@@ -1,0 +1,168 @@
+blueprint:
+  name: 空调档位控制蓝图
+  description: >
+    根据 input_select 选择自动设置空调参数，并在手动调整空调后重置选择器。
+  domain: automation
+  input:
+    ac_entity:
+      name: 空调设备
+      description: 选择需要控制的空调设备
+      selector:
+        entity:
+          domain: climate
+    profile_select:
+      name: 档位选择器
+      description: 选择 input_select 实体，用于控制空调档位（例如：普通、睡眠、强力）
+      selector:
+        entity:
+          domain: input_select
+    profile_sleep:
+      name: 睡眠 档温度/风速/模式
+      description: 设置“睡眠”档的参数
+      default:
+        temperature: 27
+        fan_mode: low
+        hvac_mode: cool
+      selector:
+        object:
+    profile_normal:
+      name: 普通 档温度/风速/模式
+      description: 设置“普通”档的参数
+      default:
+        temperature: 26
+        fan_mode: auto
+        hvac_mode: cool
+      selector:
+        object:
+    profile_power:
+      name: 强力 档温度/风速/模式
+      description: 设置“强力”档的参数
+      default:
+        temperature: 16
+        fan_mode: high
+        hvac_mode: cool
+      selector:
+        object:
+    none_option:
+      name: 空档值（无选择时）
+      description: 指定 input_select 中代表“无”状态的选项文字
+      default: 无
+
+mode: single
+
+triggers:
+  # 触发条件1：input_select 变化 → 应用档位设置
+  - platform: state
+    entity_id: !input profile_select
+    id: apply_profile
+
+  # 触发条件2：空调被手动修改 → 重置档位为“无”
+  - platform: state
+    entity_id: !input ac_entity
+    attribute: temperature
+    id: manual_reset
+  - platform: state
+    entity_id: !input ac_entity
+    attribute: fan_mode
+    id: manual_reset
+  - platform: state
+    entity_id: !input ac_entity
+    attribute: hvac_mode
+    id: manual_reset
+
+variables:
+  profile: "{{ states(profile_select) }}"
+  none_option: !input none_option
+  last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
+  profile_sleep: !input profile_sleep
+  profile_normal: !input profile_normal
+  profile_power: !input profile_power
+
+conditions: []
+
+actions:
+  - choose:
+      # --- 当 input_select 改变时 ---
+      - conditions:
+          - condition: trigger
+            id: apply_profile
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ profile == '睡眠' }}"
+                sequence:
+                  - service: climate.set_temperature
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      temperature: "{{ profile_sleep.temperature }}"
+                  - service: climate.set_fan_mode
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      fan_mode: "{{ profile_sleep.fan_mode }}"
+                  - service: climate.set_hvac_mode
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      hvac_mode: "{{ profile_sleep.hvac_mode }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ profile == '普通' }}"
+                sequence:
+                  - service: climate.set_temperature
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      temperature: "{{ profile_normal.temperature }}"
+                  - service: climate.set_fan_mode
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      fan_mode: "{{ profile_normal.fan_mode }}"
+                  - service: climate.set_hvac_mode
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      hvac_mode: "{{ profile_normal.hvac_mode }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ profile == '强力' }}"
+                sequence:
+                  - service: climate.set_temperature
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      temperature: "{{ profile_power.temperature }}"
+                  - service: climate.set_fan_mode
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      fan_mode: "{{ profile_power.fan_mode }}"
+                  - service: climate.set_hvac_mode
+                    target:
+                      entity_id: !input ac_entity
+                    data:
+                      hvac_mode: "{{ profile_power.hvac_mode }}"
+
+      # --- 当手动修改空调时 ---
+      - conditions:
+          - condition: trigger
+            id: manual_reset
+          - condition: template
+            value_template: >
+              {{ states(profile_select) != none_option }}
+          - condition: template
+            value_template: >
+              {% if last_apply is not none %}
+                {{ (as_timestamp(now()) - as_timestamp(last_apply)) > 10 }}
+              {% else %}
+                true
+              {% endif %}
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input profile_select
+            data:
+              option: "{{ none_option }}"
