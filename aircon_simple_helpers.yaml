@@ -54,12 +54,14 @@ input_select:
 # ============================================
 # 创建上述实体后，在使用蓝图时这样配置：
 #
-# === 主卧空调配置（不启用关闭功能）===
+# === 主卧空调配置（基础配置）===
 # ac_entity: climate.master_bedroom_ac
+# ac_friendly_name: 主卧空调
 # profile_select: input_select.master_bedroom_ac_profile
 # none_option: 无
-# reset_delay: 10
+# reset_delay: 2
 # enable_turn_off: false
+# enable_event_trigger: false
 # profiles: |
 #   睡眠=27,low,cool
 #   普通=26,auto,cool
@@ -68,9 +70,27 @@ input_select:
 #
 # === 主卧空调配置（启用关闭功能）===
 # ac_entity: climate.master_bedroom_ac
+# ac_friendly_name: 主卧空调
 # profile_select: input_select.master_bedroom_ac_profile
 # none_option: 无
-# reset_delay: 10
+# reset_delay: 2
+# enable_turn_off: true
+# turn_off_option: 关闭
+# enable_event_trigger: false
+# profiles: |
+#   睡眠=27,low,cool
+#   普通=26,auto,cool
+#   强力=16,high,cool
+#   静音=28,low,cool
+#
+# === 主卧空调配置（启用事件触发）===
+# ac_entity: climate.master_bedroom_ac
+# ac_friendly_name: 主卧空调
+# enable_event_trigger: true
+# event_entity: event.xiaomi_cn_1178193466_hub1_virtual_event_e_4_1
+# profile_select: input_select.master_bedroom_ac_profile
+# none_option: 无
+# reset_delay: 2
 # enable_turn_off: true
 # turn_off_option: 关闭
 # profiles: |
@@ -78,6 +98,14 @@ input_select:
 #   普通=26,auto,cool
 #   强力=16,high,cool
 #   静音=28,low,cool
+#
+# 事件触发说明：
+# 当事件的 event_type 属性值为 "主卧空调睡眠模式" 时，会自动选择"睡眠"档位
+# 格式：别名 + 档位名称 + "模式"
+# 例如：
+#   - "主卧空调睡眠模式" → 触发"睡眠"档位
+#   - "主卧空调普通模式" → 触发"普通"档位
+#   - "主卧空调关闭模式" → 触发"关闭"档位（如果启用）
 #
 # === 客厅空调配置 ===
 # ac_entity: climate.living_room_ac

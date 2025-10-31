@@ -22,6 +22,28 @@ blueprint:
         entity:
           domain: climate
 
+    ac_friendly_name:
+      name: 空调别名
+      description: 空调的友好名称，用于事件匹配（例如：主卧空调）
+      default: ""
+      selector:
+        text:
+
+    enable_event_trigger:
+      name: 启用事件触发
+      description: 是否启用通过事件触发档位切换
+      default: false
+      selector:
+        boolean:
+
+    event_entity:
+      name: 事件实体
+      description: 选择事件实体（例如：小米按钮事件）
+      default: ""
+      selector:
+        entity:
+          domain: event
+
     profile_select:
       name: 档位选择器
       description: 选择档位控制的 input_select 实体
@@ -87,6 +109,12 @@ triggers:
     entity_id: !input profile_select
     id: apply_profile
 
+  - platform: event
+    event_type: state_changed
+    event_data:
+      entity_id: !input event_entity
+    id: event_trigger
+
   - platform: state
     entity_id: !input ac_entity
     attribute: temperature
@@ -99,11 +127,14 @@ triggers:
 
   - platform: state
     entity_id: !input ac_entity
-    attribute: hvac_action
+    attribute: hvac_mode
     id: manual_reset
 
 variables:
   ac_entity_var: !input ac_entity
+  ac_friendly_name: !input ac_friendly_name
+  enable_event_trigger: !input enable_event_trigger
+  event_entity: !input event_entity
   profile_select_var: !input profile_select
   none_option: !input none_option
   reset_delay: !input reset_delay
@@ -112,6 +143,26 @@ variables:
   profiles_config: !input profiles
   current_profile: "{{ states(profile_select_var) }}"
   last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
+
+  # 从事件中提取档位名称
+  event_name: >
+    {% if trigger.id == 'event_trigger' and enable_event_trigger %}
+      {{ state_attr(event_entity, 'event_type') | default('') }}
+    {% else %}
+      ''
+    {% endif %}
+
+  # 从事件名称中解析档位（格式：别名+模式名称，例如"主卧空调睡眠模式"）
+  event_profile: >
+    {% if event_name != '' and ac_friendly_name != '' %}
+      {% if event_name.startswith(ac_friendly_name) %}
+        {{ event_name.replace(ac_friendly_name, '').replace('模式', '').strip() }}
+      {% else %}
+        ''
+      {% endif %}
+    {% else %}
+      ''
+    {% endif %}
 
   # 解析档位配置
   profiles_dict: >
@@ -132,6 +183,23 @@ variables:
 
 actions:
   - choose:
+      # 事件触发 - 设置档位选择器
+      - conditions:
+          - condition: trigger
+            id: event_trigger
+          - condition: template
+            value_template: "{{ enable_event_trigger }}"
+          - condition: template
+            value_template: "{{ event_profile != '' }}"
+          - condition: template
+            value_template: "{{ event_profile in profiles_dict.keys() or (enable_turn_off and event_profile == turn_off_option) or event_profile == none_option }}"
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input profile_select
+            data:
+              option: "{{ event_profile }}"
+
       # 关闭空调
       - conditions:
           - condition: trigger
