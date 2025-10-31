@@ -99,7 +99,7 @@ triggers:
 
   - platform: state
     entity_id: !input ac_entity
-    attribute: hvac_mode
+    attribute: hvac_modes
     id: manual_reset
 
 variables:
