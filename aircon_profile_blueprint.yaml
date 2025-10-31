@@ -39,11 +39,11 @@ blueprint:
     reset_delay:
       name: 重置延迟（秒）
       description: 手动调整空调后多少秒才会重置档位选择器（避免应用档位时误触发）
-      default: 10
+      default: 2
       selector:
         number:
-          min: 5
-          max: 60
+          min: 1
+          max: 10
           step: 1
           unit_of_measurement: 秒
 
