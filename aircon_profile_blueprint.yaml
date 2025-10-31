@@ -143,10 +143,10 @@ variables:
   current_profile: "{{ states(profile_select_var) }}"
   last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
 
-  # 从事件中提取档位名称
+  # 从事件中提取档位名称 (从 Event Name 属性获取)
   event_name: >
     {% if trigger.id == 'event_trigger' and enable_event_trigger %}
-      {{ state_attr(event_entity, 'event_type') | default('') }}
+      {{ state_attr(event_entity, 'Event Name') | default('') }}
     {% else %}
       ''
     {% endif %}
