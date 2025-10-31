@@ -32,7 +32,7 @@ blueprint:
     enable_event_trigger:
       name: 启用事件触发
       description: 是否启用通过事件触发档位切换
-      default: false
+      default: true
       selector:
         boolean:
 
@@ -43,6 +43,10 @@ blueprint:
       selector:
         entity:
           domain: event
+          filter:
+            - attribute: event_types
+              operator: contains
+              value: "Virtual Event Occurred"
 
     profile_select:
       name: 档位选择器
