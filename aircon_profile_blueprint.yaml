@@ -38,15 +38,10 @@ blueprint:
 
     event_entity:
       name: 事件实体
-      description: 选择事件实体（例如：小米按钮事件）
-      default: ""
+      description: 中枢网关虚拟事件实体ID
+      default: event.xiaomi_cn_1178193466_hub1_virtual_event_e_4_1
       selector:
-        entity:
-          domain: event
-          filter:
-            - attribute: event_types
-              operator: contains
-              value: "Virtual Event Occurred"
+        text:
 
     profile_select:
       name: 档位选择器
