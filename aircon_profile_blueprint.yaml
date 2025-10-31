@@ -50,7 +50,7 @@ blueprint:
     enable_turn_off:
       name: 启用关闭功能
       description: 是否添加"关闭"档位功能（选择后直接关闭空调）
-      default: false
+      default: true
       selector:
         boolean:
 
