@@ -153,11 +153,11 @@ variables:
 
   # 从事件名称中解析档位（格式：别名+模式名称，例如"主卧空调睡眠模式"）
   event_profile: >
-    {% if event_name != '' and ac_friendly_name != '' %}
-      {% if event_name.startswith(ac_friendly_name) %}
+    {% if event_name != '' %}
+      {% if ac_friendly_name != '' and event_name.startswith(ac_friendly_name) %}
         {{ event_name.replace(ac_friendly_name, '').replace('模式', '').strip() }}
       {% else %}
-        ''
+        {{ event_name.replace('模式', '').strip() }}
       {% endif %}
     {% else %}
       ''
