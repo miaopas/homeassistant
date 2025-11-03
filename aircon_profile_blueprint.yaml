@@ -1,7 +1,7 @@
 blueprint:
   name: 空调档位控制蓝图
   description: >
-    根据自定义档位自动设置空调参数，支持任意数量的档位配置。v1.0
+    根据自定义档位自动设置空调参数，支持任意数量的档位配置。v1.1
 
     功能特性：
     - 支持无限数量的自定义档位（睡眠、普通、强力、静音等）
@@ -195,6 +195,30 @@ variables:
       {% set debug_info = ['外层条件未通过'] %}
     {% endif %}
     {{ debug_info | join('; ') }}
+
+  # 调试：新匹配逻辑
+  debug_new_match: >
+    {% set debug = [] %}
+    {% set debug = debug + ['开始匹配'] %}
+    {% if current_hvac != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
+      {% set debug = debug + ['外层通过'] %}
+      {% for line in profiles_config.split('\n') %}
+        {% set debug = debug + ['行: ' ~ line] %}
+        {% if '=' in line %}
+          {% set parts = line.split('=') %}
+          {% set profile_name = parts[0].strip() %}
+          {% set values = parts[1].split(',') %}
+          {% set profile_temp = values[0].strip() | float %}
+          {% set profile_fan = values[1].strip() %}
+          {% set profile_mode = values[2].strip() %}
+          {% set temp_ok = (profile_temp - (current_temp | float)) | abs < 0.5 %}
+          {% set fan_ok = profile_fan == current_fan %}
+          {% set mode_ok = profile_mode == current_hvac %}
+          {% set debug = debug + [profile_name ~ ': t=' ~ temp_ok ~ ' f=' ~ fan_ok ~ ' m=' ~ mode_ok ~ ' (' ~ profile_temp ~ ',' ~ profile_fan ~ ',' ~ profile_mode ~ ')'] %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    {{ debug | join(' | ') }}
 
   # 智能匹配当前空调状态对应的档位
   matched_profile: >
