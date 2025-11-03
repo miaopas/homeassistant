@@ -134,7 +134,7 @@ variables:
   current_ac_state: "{{ states(ac_entity_var) }}"
   current_temp: "{{ state_attr(ac_entity_var, 'temperature') }}"
   current_fan: "{{ state_attr(ac_entity_var, 'fan_mode') }}"
-  current_hvac: "{{ state_attr(ac_entity_var, 'hvac_mode') }}"
+  current_hvac: "{{ states(ac_entity_var) }}"
 
   # 从事件中提取档位名称 (从 Event Name 属性获取)
   event_name: >
