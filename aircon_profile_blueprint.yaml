@@ -173,6 +173,14 @@ variables:
     {% endfor %}
     {{ ns.result }}
 
+  # 调试：外层条件检查
+  debug_outer_conditions: >
+    hvac_check: current_hvac='{{ current_hvac }}' is_not_off={{ current_hvac != 'off' }},
+    temp_check: current_temp='{{ current_temp }}' is_not_none={{ current_temp is not none }},
+    fan_check: current_fan='{{ current_fan }}' is_not_none={{ current_fan is not none }},
+    hvac_not_none={{ current_hvac is not none }},
+    all_pass={{ current_hvac != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none }}
+
   # 调试：各个匹配条件的结果
   debug_match_conditions: >
     {% set debug_info = [] %}
@@ -183,6 +191,8 @@ variables:
         {% set mode_match = config.mode | string == current_hvac | string %}
         {% set debug_info = debug_info + [profile_name ~ ': temp=' ~ temp_match ~ ' fan=' ~ fan_match ~ ' mode=' ~ mode_match ~ ' (fan: ' ~ config.fan ~ ' vs ' ~ current_fan ~ ', mode: ' ~ config.mode ~ ' vs ' ~ current_hvac ~ ')'] %}
       {% endfor %}
+    {% else %}
+      {% set debug_info = ['外层条件未通过'] %}
     {% endif %}
     {{ debug_info | join('; ') }}
 
