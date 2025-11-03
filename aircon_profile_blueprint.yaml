@@ -183,7 +183,7 @@ variables:
       {% set result = turn_off_option %}
     {% elif current_hvac_action != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
       {% for profile_name, config in profiles_dict.items() %}
-        {% if config.temp == current_temp and config.fan == current_fan and config.mode == current_hvac %}
+        {% if (config.temp - (current_temp | float)) | abs < 0.5 and config.fan == current_fan and config.mode == current_hvac %}
           {% set result = profile_name %}
         {% endif %}
       {% endfor %}
