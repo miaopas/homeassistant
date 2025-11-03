@@ -207,10 +207,17 @@ variables:
     {% if current_hvac == 'off' and enable_turn_off %}
       {% set result = turn_off_option %}
     {% elif current_hvac != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
-      {% for profile_name in profiles_dict.keys() %}
-        {% set config = profiles_dict[profile_name] %}
-        {% if (config.temp - (current_temp | float)) | abs < 0.5 and config.fan | string == current_fan | string and config.mode | string == current_hvac | string %}
-          {% set result = profile_name %}
+      {% for line in profiles_config.split('\n') %}
+        {% if '=' in line %}
+          {% set parts = line.split('=') %}
+          {% set profile_name = parts[0].strip() %}
+          {% set values = parts[1].split(',') %}
+          {% set profile_temp = values[0].strip() | float %}
+          {% set profile_fan = values[1].strip() %}
+          {% set profile_mode = values[2].strip() %}
+          {% if (profile_temp - (current_temp | float)) | abs < 0.5 and profile_fan == current_fan and profile_mode == current_hvac %}
+            {% set result = profile_name %}
+          {% endif %}
         {% endif %}
       {% endfor %}
     {% endif %}
