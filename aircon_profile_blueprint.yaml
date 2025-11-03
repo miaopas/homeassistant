@@ -173,13 +173,10 @@ variables:
     {% endfor %}
     {{ ns.result }}
 
-  # 读取空调运行状态
-  current_hvac_action: "{{ state_attr(ac_entity_var, 'hvac_action') }}"
-
   # 调试：各个匹配条件的结果
   debug_match_conditions: >
     {% set debug_info = [] %}
-    {% if current_hvac_action != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
+    {% if current_hvac != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
       {% for profile_name, config in profiles_dict.items() %}
         {% set temp_match = (config.temp - (current_temp | float)) | abs < 0.5 %}
         {% set fan_match = config.fan | string == current_fan | string %}
@@ -192,9 +189,9 @@ variables:
   # 智能匹配当前空调状态对应的档位
   matched_profile: >
     {% set result = none_option %}
-    {% if current_hvac_action == 'off' and enable_turn_off %}
+    {% if current_hvac == 'off' and enable_turn_off %}
       {% set result = turn_off_option %}
-    {% elif current_hvac_action != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
+    {% elif current_hvac != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
       {% for profile_name, config in profiles_dict.items() %}
         {% if (config.temp - (current_temp | float)) | abs < 0.5 and config.fan | string == current_fan | string and config.mode | string == current_hvac | string %}
           {% set result = profile_name %}
