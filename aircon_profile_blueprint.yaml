@@ -5,8 +5,8 @@ blueprint:
 
     功能特性：
     - 支持无限数量的自定义档位（睡眠、普通、强力、静音等）
-    - 手动调整空调后自动重置档位选择器
-    - 可配置的重置延迟时间
+    - 手动调整空调后智能匹配档位选择器
+    - 双向同步：档位和空调状态始终保持一致
     - 灵活的配置方式，每个空调可以有不同的档位
 
     使用前需要先创建：
@@ -56,17 +56,6 @@ blueprint:
       default: 无
       selector:
         text:
-
-    reset_delay:
-      name: 重置延迟（秒）
-      description: 手动调整空调后多少秒才会重置档位选择器（避免应用档位时误触发）
-      default: 10
-      selector:
-        number:
-          min: 10
-          max: 20
-          step: 1
-          unit_of_measurement: 秒
 
     enable_turn_off:
       name: 启用关闭功能
@@ -136,12 +125,16 @@ variables:
   event_entity: !input event_entity
   profile_select_var: !input profile_select
   none_option: !input none_option
-  reset_delay: !input reset_delay
   enable_turn_off: !input enable_turn_off
   turn_off_option: !input turn_off_option
   profiles_config: !input profiles
   current_profile: "{{ states(profile_select_var) }}"
-  last_apply: "{{ state_attr(this.entity_id, 'last_triggered') }}"
+
+  # 读取空调当前状态
+  current_ac_state: "{{ states(ac_entity_var) }}"
+  current_temp: "{{ state_attr(ac_entity_var, 'temperature') }}"
+  current_fan: "{{ state_attr(ac_entity_var, 'fan_mode') }}"
+  current_hvac: "{{ state_attr(ac_entity_var, 'hvac_mode') }}"
 
   # 从事件中提取档位名称 (从 Event Name 属性获取)
   event_name: >
@@ -179,6 +172,20 @@ variables:
       {% endif %}
     {% endfor %}
     {{ ns.result }}
+
+  # 智能匹配当前空调状态对应的档位
+  matched_profile: >
+    {% set result = none_option %}
+    {% if current_ac_state == 'off' and enable_turn_off %}
+      {% set result = turn_off_option %}
+    {% elif current_ac_state != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
+      {% for profile_name, config in profiles_dict.items() %}
+        {% if config.temp == current_temp and config.fan == current_fan and config.mode == current_hvac %}
+          {% set result = profile_name %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    {{ result }}
 
 actions:
   - choose:
@@ -243,22 +250,15 @@ actions:
             data:
               hvac_mode: "{{ profile_config.mode }}"
 
-      # 手动修改后重置
+      # 手动修改后智能匹配档位
       - conditions:
           - condition: trigger
             id: manual_reset
           - condition: template
-            value_template: "{{ current_profile != none_option and current_profile not in ['unknown', 'unavailable'] }}"
-          - condition: template
-            value_template: |
-              {% if last_apply is not none %}
-                {{ (as_timestamp(now()) - as_timestamp(last_apply)) > reset_delay }}
-              {% else %}
-                true
-              {% endif %}
+            value_template: "{{ matched_profile != current_profile }}"
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input profile_select
             data:
-              option: "{{ none_option }}"
+              option: "{{ matched_profile }}"
