@@ -176,6 +176,19 @@ variables:
   # 读取空调运行状态
   current_hvac_action: "{{ state_attr(ac_entity_var, 'hvac_action') }}"
 
+  # 调试：各个匹配条件的结果
+  debug_match_conditions: >
+    {% set debug_info = [] %}
+    {% if current_hvac_action != 'off' and current_temp is not none and current_fan is not none and current_hvac is not none %}
+      {% for profile_name, config in profiles_dict.items() %}
+        {% set temp_match = (config.temp - (current_temp | float)) | abs < 0.5 %}
+        {% set fan_match = config.fan | string == current_fan | string %}
+        {% set mode_match = config.mode | string == current_hvac | string %}
+        {% set debug_info = debug_info + [profile_name ~ ': temp=' ~ temp_match ~ ' fan=' ~ fan_match ~ ' mode=' ~ mode_match ~ ' (fan: ' ~ config.fan ~ ' vs ' ~ current_fan ~ ', mode: ' ~ config.mode ~ ' vs ' ~ current_hvac ~ ')'] %}
+      {% endfor %}
+    {% endif %}
+    {{ debug_info | join('; ') }}
+
   # 智能匹配当前空调状态对应的档位
   matched_profile: >
     {% set result = none_option %}
