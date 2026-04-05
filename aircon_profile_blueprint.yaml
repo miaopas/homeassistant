@@ -217,6 +217,8 @@ actions:
           - condition: template
             value_template: "{{ enable_event_trigger }}"
           - condition: template
+            value_template: "{{ ac_friendly_name == '' or ac_friendly_name in event_name }}"
+          - condition: template
             value_template: "{{ event_profile != '' }}"
           - condition: template
             value_template: "{{ event_profile in profiles_dict.keys() or (enable_turn_off and event_profile == turn_off_option) or event_profile == none_option }}"
