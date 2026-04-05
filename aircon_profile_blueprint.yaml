@@ -71,6 +71,14 @@ blueprint:
       selector:
         text:
 
+    notify_entity:
+      name: 状态通知实体
+      description: 用于发送空调开关状态的虚拟事件通知实体
+      default: notify.xiaomi_cn_1178193466_hub1_emit_virtual_event_a_4_1
+      selector:
+        entity:
+          domain: notify
+
     profiles:
       name: 档位配置列表
       description: >
@@ -128,6 +136,7 @@ variables:
   enable_turn_off: !input enable_turn_off
   turn_off_option: !input turn_off_option
   profiles_config: !input profiles
+  notify_entity_var: !input notify_entity
   current_profile: "{{ states(profile_select_var) }}"
 
   # 读取空调当前状态
@@ -270,3 +279,10 @@ actions:
               entity_id: !input profile_select
             data:
               option: "{{ matched_profile }}"
+
+  # 发送虚拟事件通知空调状态
+  - action: notify.send_message
+    target:
+      entity_id: "{{ notify_entity_var }}"
+    data:
+      message: "{{ ac_friendly_name }}{{ '开' if states(ac_entity_var) != 'off' else '关' }}"
