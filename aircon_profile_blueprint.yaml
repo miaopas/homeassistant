@@ -126,6 +126,10 @@ triggers:
     attribute: hvac_action
     id: manual_reset
 
+  - platform: state
+    entity_id: !input ac_entity
+    id: ac_power_change
+
 variables:
   ac_entity_var: !input ac_entity
   ac_friendly_name: !input ac_friendly_name
@@ -280,9 +284,15 @@ actions:
             data:
               option: "{{ matched_profile }}"
 
-  # 发送虚拟事件通知空调状态
-  - action: notify.send_message
-    target:
-      entity_id: "{{ notify_entity_var }}"
-    data:
-      message: "{{ ac_friendly_name }}{{ '开' if states(ac_entity_var) != 'off' else '关' }}"
+      # 空调开关状态变化时发送通知
+      - conditions:
+          - condition: trigger
+            id: ac_power_change
+          - condition: template
+            value_template: "{{ trigger.from_state.state == 'off' or trigger.to_state.state == 'off' }}"
+        sequence:
+          - action: notify.send_message
+            target:
+              entity_id: "{{ notify_entity_var }}"
+            data:
+              message: "{{ ac_friendly_name }}{{ '开' if trigger.to_state.state != 'off' else '关' }}"
