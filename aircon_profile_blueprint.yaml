@@ -1,7 +1,7 @@
 blueprint:
   name: 空调档位控制蓝图
   description: >
-    根据自定义档位自动设置空调参数，支持任意数量的档位配置。v1.2
+    根据自定义档位自动设置空调参数，支持任意数量的档位配置。v1.3
 
     功能特性：
     - 支持无限数量的自定义档位（睡眠、普通、强力、静音等）
@@ -291,7 +291,9 @@ actions:
           - condition: trigger
             id: ac_power_change
           - condition: template
-            value_template: "{{ trigger.from_state.state == 'off' or trigger.to_state.state == 'off' }}"
+            value_template: >
+              {{ trigger.from_state.state != trigger.to_state.state and
+                 (trigger.from_state.state == 'off' or trigger.to_state.state == 'off') }}
         sequence:
           - action: notify.send_message
             target:
