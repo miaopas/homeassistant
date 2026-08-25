@@ -1,0 +1,96 @@
+blueprint:
+  name: 灯组状态指示灯同步
+  description: >
+    监控一组灯的开关状态，用物理开关上的指示灯汇总显示。v1.0
+
+    逻辑：
+    - 只要选中的灯里有任意一个处于开启状态 → 点亮指示灯
+    - 选中的灯全部关闭 → 熄灭指示灯
+
+    采用边沿检测（template 触发器）：只在"第一个灯亮起"或"最后一个灯熄灭"时动作，
+    中间的灯来回开关（聚合状态不变）不会重复发送指令。
+    Home Assistant 启动时也会同步一次当前状态。
+
+    指示灯通过 notify 实体控制，message 为列表字符串（"[0]"=左，"[1]"=右），
+    开/关由所选的 notify 实体本身决定。
+  domain: automation
+  input:
+    lights:
+      name: 灯（可多选）
+      description: 需要监控的灯，选择一个或多个
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    led_on_entity:
+      name: 开指示灯实体
+      description: 用于点亮指示灯的 notify 实体
+      selector:
+        entity:
+          domain: notify
+
+    led_off_entity:
+      name: 关指示灯实体
+      description: 用于熄灭指示灯的 notify 实体
+      selector:
+        entity:
+          domain: notify
+
+    led_index:
+      name: 指示灯位置
+      description: 指示灯在开关上的位置索引（0=左，1=右）
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box
+
+mode: queued
+
+trigger_variables:
+  lights_list: !input lights
+
+triggers:
+  # 从"全灭"变为"有灯亮"
+  - platform: template
+    value_template: "{{ expand(lights_list) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+    id: any_on
+
+  # 从"有灯亮"变为"全灭"
+  - platform: template
+    value_template: "{{ expand(lights_list) | selectattr('state', 'eq', 'on') | list | count == 0 }}"
+    id: all_off
+
+  # 启动时同步一次
+  - platform: homeassistant
+    event: start
+    id: ha_start
+
+variables:
+  lights_list_var: !input lights
+  led_on_entity_var: !input led_on_entity
+  led_off_entity_var: !input led_off_entity
+  led_index_var: !input led_index
+  any_on: "{{ expand(lights_list_var) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+
+actions:
+  - choose:
+      # 有灯开启 -> 点亮指示灯
+      - conditions:
+          - condition: template
+            value_template: "{{ any_on }}"
+        sequence:
+          - action: notify.send_message
+            target:
+              entity_id: "{{ led_on_entity_var }}"
+            data:
+              message: "[{{ led_index_var }}]"
+    # 全部关闭 -> 熄灭指示灯
+    default:
+      - action: notify.send_message
+        target:
+          entity_id: "{{ led_off_entity_var }}"
+        data:
+          message: "[{{ led_index_var }}]"
