@@ -1,18 +1,22 @@
 blueprint:
   name: 空调档位控制蓝图
   description: >
-    根据自定义档位自动设置空调参数，支持任意数量的档位配置。v1.4
+    根据自定义档位自动设置空调参数，支持任意数量的档位配置。v2.0
 
     功能特性：
     - 支持无限数量的自定义档位（睡眠、普通、强力、静音等）
     - 手动调整空调后智能匹配档位选择器
     - 双向同步：档位和空调状态始终保持一致
     - 灵活的配置方式，每个空调可以有不同的档位
+    - 物理按键一键开关空调（关→普通模式，开→关闭）
+    - 空调开关状态用物理开关上的指示灯同步显示
+    - v2.0 起完全不再依赖任何虚拟事件实体，全部在 HA 侧完成
 
     使用前需要先创建：
     1. input_select 档位选择器（在 Dashboard 显示为下拉菜单）
 
     档位参数直接在蓝图配置中定义，无需创建额外的helper实体！
+    使用物理按键功能时，请确保已启用"关闭功能"，且档位列表中存在"普通"档位。
   domain: automation
   input:
     ac_entity:
@@ -21,27 +25,6 @@ blueprint:
       selector:
         entity:
           domain: climate
-
-    ac_friendly_name:
-      name: 空调别名
-      description: 空调的友好名称，用于事件匹配（例如：主卧空调）
-      default: ""
-      selector:
-        text:
-
-    enable_event_trigger:
-      name: 启用事件触发
-      description: 是否启用通过事件触发档位切换
-      default: true
-      selector:
-        boolean:
-
-    event_entity:
-      name: 事件实体
-      description: 中枢网关虚拟事件实体ID
-      default: event.xiaomi_cn_1178193466_hub1_virtual_event_e_4_1
-      selector:
-        text:
 
     profile_select:
       name: 档位选择器
@@ -71,13 +54,43 @@ blueprint:
       selector:
         text:
 
-    notify_entity:
-      name: 状态通知实体
-      description: 用于发送空调开关状态的虚拟事件通知实体
-      default: notify.xiaomi_cn_1178193466_hub1_emit_virtual_event_a_4_1
+    click_entity:
+      name: 物理按键事件实体
+      description: 用于开关空调的物理按键 event 实体（每次按下触发事件）
+      selector:
+        entity:
+          domain: event
+
+    button_on_profile:
+      name: 按键开机档位
+      description: 空调关闭时按下按键切换到的档位名称（须存在于档位列表和 input_select 中）
+      default: 普通
+      selector:
+        text:
+
+    led_on_entity:
+      name: 开指示灯实体
+      description: 用于点亮物理开关指示灯的 notify 实体
       selector:
         entity:
           domain: notify
+
+    led_off_entity:
+      name: 关指示灯实体
+      description: 用于熄灭物理开关指示灯的 notify 实体
+      selector:
+        entity:
+          domain: notify
+
+    led_index:
+      name: 指示灯位置
+      description: 指示灯在开关上的位置索引（0=左，1=右）
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box
 
     profiles:
       name: 档位配置列表
@@ -105,11 +118,9 @@ triggers:
     entity_id: !input profile_select
     id: apply_profile
 
-  - platform: event
-    event_type: state_changed
-    event_data:
-      entity_id: !input event_entity
-    id: event_trigger
+  - platform: state
+    entity_id: !input click_entity
+    id: button_toggle
 
   - platform: state
     entity_id: !input ac_entity
@@ -128,19 +139,19 @@ triggers:
 
   - platform: state
     entity_id: !input ac_entity
-    id: ac_power_change
+    id: power_change
 
 variables:
   ac_entity_var: !input ac_entity
-  ac_friendly_name: !input ac_friendly_name
-  enable_event_trigger: !input enable_event_trigger
-  event_entity: !input event_entity
   profile_select_var: !input profile_select
   none_option: !input none_option
   enable_turn_off: !input enable_turn_off
   turn_off_option: !input turn_off_option
   profiles_config: !input profiles
-  notify_entity_var: !input notify_entity
+  button_on_profile_var: !input button_on_profile
+  led_on_entity_var: !input led_on_entity
+  led_off_entity_var: !input led_off_entity
+  led_index_var: !input led_index
   current_profile: "{{ states(profile_select_var) }}"
 
   # 读取空调当前状态
@@ -148,26 +159,6 @@ variables:
   current_temp: "{{ state_attr(ac_entity_var, 'temperature') }}"
   current_fan: "{{ state_attr(ac_entity_var, 'fan_mode') }}"
   current_hvac: "{{ states(ac_entity_var) }}"
-
-  # 从事件中提取档位名称 (从 Event Name 属性获取)
-  event_name: >
-    {% if trigger.id == 'event_trigger' and enable_event_trigger %}
-      {{ state_attr(event_entity, 'Event Name') | default('') }}
-    {% else %}
-      ''
-    {% endif %}
-
-  # 从事件名称中解析档位（格式：别名+模式名称，例如"主卧空调睡眠模式"）
-  event_profile: >
-    {% if event_name != '' %}
-      {% if ac_friendly_name != '' and event_name.startswith(ac_friendly_name) %}
-        {{ event_name.replace(ac_friendly_name, '').replace('模式', '').strip() }}
-      {% else %}
-        {{ event_name.replace('模式', '').strip() }}
-      {% endif %}
-    {% else %}
-      ''
-    {% endif %}
 
   # 解析档位配置
   profiles_dict: >
@@ -210,24 +201,33 @@ variables:
 
 actions:
   - choose:
-      # 事件触发 - 设置档位选择器
+      # 物理按键 - 开关空调（toggle）
       - conditions:
           - condition: trigger
-            id: event_trigger
+            id: button_toggle
           - condition: template
-            value_template: "{{ enable_event_trigger }}"
-          - condition: template
-            value_template: "{{ ac_friendly_name == '' or ac_friendly_name in event_name }}"
-          - condition: template
-            value_template: "{{ event_profile != '' }}"
-          - condition: template
-            value_template: "{{ event_profile in profiles_dict.keys() or (enable_turn_off and event_profile == turn_off_option) or event_profile == none_option }}"
+            value_template: >
+              {{ trigger.from_state is not none and
+                 trigger.to_state.state not in ['unknown', 'unavailable'] }}
         sequence:
-          - service: input_select.select_option
-            target:
-              entity_id: !input profile_select
-            data:
-              option: "{{ event_profile }}"
+          - choose:
+              # 空调当前关闭 -> 打开到普通档位
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_ac_state == 'off' }}"
+                sequence:
+                  - service: input_select.select_option
+                    target:
+                      entity_id: !input profile_select
+                    data:
+                      option: "{{ button_on_profile_var }}"
+            # 空调当前打开 -> 关闭
+            default:
+              - service: input_select.select_option
+                target:
+                  entity_id: !input profile_select
+                data:
+                  option: "{{ turn_off_option }}"
 
       # 关闭空调
       - conditions:
@@ -286,17 +286,31 @@ actions:
             data:
               option: "{{ matched_profile }}"
 
-      # 空调开关状态变化时发送通知
+      # 空调开关状态变化时同步指示灯
       - conditions:
           - condition: trigger
-            id: ac_power_change
+            id: power_change
           - condition: template
             value_template: >
               {{ trigger.from_state.state != trigger.to_state.state and
-                 (trigger.from_state.state == 'off' or trigger.to_state.state == 'off') }}
+                 (trigger.from_state.state == 'off' or trigger.to_state.state == 'off') and
+                 trigger.to_state.state not in ['unknown', 'unavailable'] }}
         sequence:
-          - action: notify.send_message
-            target:
-              entity_id: "{{ notify_entity_var }}"
-            data:
-              message: "{{ ac_friendly_name }}{{ '开' if trigger.to_state.state != 'off' else '关' }}"
+          - choose:
+              # 空调已开启 -> 点亮指示灯
+              - conditions:
+                  - condition: template
+                    value_template: "{{ trigger.to_state.state != 'off' }}"
+                sequence:
+                  - action: notify.send_message
+                    target:
+                      entity_id: "{{ led_on_entity_var }}"
+                    data:
+                      message: "[{{ led_index_var }}]"
+            # 空调已关闭 -> 熄灭指示灯
+            default:
+              - action: notify.send_message
+                target:
+                  entity_id: "{{ led_off_entity_var }}"
+                data:
+                  message: "[{{ led_index_var }}]"
