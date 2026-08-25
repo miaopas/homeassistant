@@ -10,8 +10,10 @@ blueprint:
     说明：
     - "开关" 指物理按键的 event 实体（单击事件）；每次单击其 state 会变化。
       请选择对应"单击/Click"的 event 实体。
-    - 指示灯通过 notify 实体控制，message 为列表字符串：
-      "[0]"=左，"[1]"=右，"[0, 1]"=两个都控制；开/关由所选 notify 实体本身决定。
+    - 指示灯通过 notify 实体控制；开/关由所选 notify 实体本身决定。
+    - 支持多个指示灯各用不同位置：用"指示灯位置列表"按选择顺序为每个 notify
+      指定位置索引（如 [0, 1]），长度需与 notify 个数一致。
+    - 开、关两组 notify 请按相同顺序选择，位置列表对两者都生效。
     - 开关、灯、指示灯均可多选。
   domain: automation
   input:
@@ -47,9 +49,12 @@ blueprint:
           domain: notify
           multiple: true
 
-    led_message:
-      name: 指示灯 message
-      description: 发送给指示灯 notify 的 message（"[0]"=左，"[1]"=右，"[0, 1]"=两个）
+    led_positions:
+      name: 指示灯位置列表
+      description: >
+        按 notify 的选择顺序，为每个指示灯指定位置索引，例如 [0, 1] 表示
+        第一个 notify 用位置 0、第二个用位置 1。长度需与 notify 个数一致。
+        （0=左，1=右）
       default: "[0]"
       selector:
         text:
@@ -68,7 +73,8 @@ variables:
   lights_list_var: !input lights
   led_on_entities_var: !input led_on_entities
   led_off_entities_var: !input led_off_entities
-  led_message_var: !input led_message
+  led_positions_var: !input led_positions
+  led_positions_list: "{{ led_positions_var | from_json }}"
   turn_on_scene_var: !input turn_on_scene
   use_scene: "{{ turn_on_scene_var not in ['', none] }}"
   any_on: "{{ expand(lights_list_var) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
@@ -93,11 +99,17 @@ actions:
           - service: light.turn_off
             target:
               entity_id: !input lights
-          - action: notify.send_message
-            target:
-              entity_id: "{{ led_off_entities_var }}"
-            data:
-              message: "{{ led_message_var }}"
+          - repeat:
+              for_each: "{{ led_off_entities_var }}"
+              sequence:
+                - action: notify.send_message
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    message: >
+                      [{{ led_positions_list[repeat.index - 1]
+                          if repeat.index <= led_positions_list | count
+                          else led_positions_list[-1] }}]
     # 全部关闭 -> 打开（场景优先）+ 点亮指示灯
     default:
       - choose:
@@ -114,8 +126,14 @@ actions:
           - service: light.turn_on
             target:
               entity_id: !input lights
-      - action: notify.send_message
-        target:
-          entity_id: "{{ led_on_entities_var }}"
-        data:
-          message: "{{ led_message_var }}"
+      - repeat:
+          for_each: "{{ led_on_entities_var }}"
+          sequence:
+            - action: notify.send_message
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                message: >
+                  [{{ led_positions_list[repeat.index - 1]
+                      if repeat.index <= led_positions_list | count
+                      else led_positions_list[-1] }}]
