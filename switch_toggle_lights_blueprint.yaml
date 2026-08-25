@@ -1,0 +1,121 @@
+blueprint:
+  name: 物理开关切换灯组
+  description: >
+    用一个或多个物理开关（按键）单击来切换一组灯，并同步指示灯。v1.0
+
+    逻辑（单击时）：
+    - 如果这组灯里有任意一个开着 → 关闭所有灯，并熄灭指示灯
+    - 如果这组灯全部关闭 → 打开所有灯，并点亮指示灯
+
+    说明：
+    - "开关" 指物理按键的 event 实体（单击事件）；每次单击其 state 会变化。
+      请选择对应"单击/Click"的 event 实体。
+    - 指示灯通过 notify 实体控制，message 为列表字符串：
+      "[0]"=左，"[1]"=右，"[0, 1]"=两个都控制；开/关由所选 notify 实体本身决定。
+    - 开关、灯、指示灯均可多选。
+  domain: automation
+  input:
+    switches:
+      name: 物理开关（可多选）
+      description: 用于触发的物理按键 event 实体（单击事件）
+      selector:
+        entity:
+          domain: event
+          multiple: true
+
+    lights:
+      name: 灯（可多选）
+      description: 需要被切换的灯
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    led_on_entities:
+      name: 开指示灯实体（可多选）
+      description: 用于点亮指示灯的 notify 实体
+      selector:
+        entity:
+          domain: notify
+          multiple: true
+
+    led_off_entities:
+      name: 关指示灯实体（可多选）
+      description: 用于熄灭指示灯的 notify 实体
+      selector:
+        entity:
+          domain: notify
+          multiple: true
+
+    led_message:
+      name: 指示灯 message
+      description: 发送给指示灯 notify 的 message（"[0]"=左，"[1]"=右，"[0, 1]"=两个）
+      default: "[0]"
+      selector:
+        text:
+
+    turn_on_scene:
+      name: 开灯场景（可选）
+      description: 若选择了场景，则打开时只执行该场景，不再直接开灯（留空=直接开灯）
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+mode: queued
+
+variables:
+  lights_list_var: !input lights
+  led_on_entities_var: !input led_on_entities
+  led_off_entities_var: !input led_off_entities
+  led_message_var: !input led_message
+  turn_on_scene_var: !input turn_on_scene
+  use_scene: "{{ turn_on_scene_var not in ['', none] }}"
+  any_on: "{{ expand(lights_list_var) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+
+triggers:
+  - platform: state
+    entity_id: !input switches
+    id: switch_click
+
+actions:
+  - condition: template
+    value_template: >
+      {{ trigger.from_state is not none and
+         trigger.to_state.state not in ['unknown', 'unavailable'] }}
+
+  - choose:
+      # 有灯开着 -> 全部关闭 + 熄灭指示灯
+      - conditions:
+          - condition: template
+            value_template: "{{ any_on }}"
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: !input lights
+          - action: notify.send_message
+            target:
+              entity_id: "{{ led_off_entities_var }}"
+            data:
+              message: "{{ led_message_var }}"
+    # 全部关闭 -> 打开（场景优先）+ 点亮指示灯
+    default:
+      - choose:
+          # 选择了场景 -> 只执行场景
+          - conditions:
+              - condition: template
+                value_template: "{{ use_scene }}"
+            sequence:
+              - service: scene.turn_on
+                target:
+                  entity_id: "{{ turn_on_scene_var }}"
+        # 未选场景 -> 直接开灯
+        default:
+          - service: light.turn_on
+            target:
+              entity_id: !input lights
+      - action: notify.send_message
+        target:
+          entity_id: "{{ led_on_entities_var }}"
+        data:
+          message: "{{ led_message_var }}"
