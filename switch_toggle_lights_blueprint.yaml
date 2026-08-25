@@ -1,16 +1,20 @@
 blueprint:
   name: 物理开关切换灯组
   description: >
-    用一个或多个物理开关（按键）单击来切换一组灯，并同步指示灯。v1.1
+    用一个或多个物理开关（按键）单击来切换一组灯，并让指示灯始终跟随灯组状态。v1.2
 
-    逻辑（单击时）：
-    - 如果这组灯里有任意一个开着 → 关闭所有灯，并熄灭指示灯
-    - 如果这组灯全部关闭 → 打开所有灯，并点亮指示灯
+    逻辑：
+    - 单击开关：有灯开着 → 关闭所有灯；全部关闭 → 打开所有灯（可选场景）。
+    - 指示灯跟随灯组状态（不只在按键时）：任意一个灯变为开启 → 点亮指示灯；
+      全部关闭 → 熄灭指示灯。灯被其他方式（场景、语音、其他自动化、手动）
+      开关时指示灯同样同步。Home Assistant 启动时也同步一次。
 
     说明：
     - "开关" 指物理按键的 event 实体（单击事件）；每次单击其 state 会变化。
       请选择对应"单击/Click"的 event 实体。
     - 指示灯通过 notify 实体控制；开/关由所选 notify 实体本身决定。
+    - 单击开灯后指示灯经由"灯状态变化"自动点亮，所以若用场景，场景点亮的灯
+      最好也包含在下面的"灯"列表里，否则指示灯可能检测不到。
     - 支持多个指示灯各用不同位置：用"指示灯位置列表"按选择顺序为每个 notify
       指定位置索引（如 [0, 1]），长度需与 notify 个数一致。
     - 开、关两组 notify 请按相同顺序选择，位置列表对两者都生效。
@@ -79,61 +83,101 @@ variables:
   use_scene: "{{ turn_on_scene_var not in ['', none] }}"
   any_on: "{{ expand(lights_list_var) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
 
+trigger_variables:
+  lights_list: !input lights
+
 triggers:
   - platform: state
     entity_id: !input switches
     id: switch_click
 
-actions:
-  - condition: template
-    value_template: >
-      {{ trigger.from_state is not none and
-         trigger.to_state.state not in ['unknown', 'unavailable'] }}
+  # 灯组从"全灭"变为"有灯亮"
+  - platform: template
+    value_template: "{{ expand(lights_list) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+    id: lights_on
 
+  # 灯组从"有灯亮"变为"全灭"
+  - platform: template
+    value_template: "{{ expand(lights_list) | selectattr('state', 'eq', 'on') | list | count == 0 }}"
+    id: lights_off
+
+  # 启动时同步一次
+  - platform: homeassistant
+    event: start
+    id: ha_start
+
+actions:
   - choose:
-      # 有灯开着 -> 全部关闭 + 熄灭指示灯
+      # 开关单击 -> 切换灯（指示灯由"灯状态变化"分支同步）
       - conditions:
+          - condition: trigger
+            id: switch_click
           - condition: template
-            value_template: "{{ any_on }}"
+            value_template: >
+              {{ trigger.from_state is not none and
+                 trigger.to_state.state not in ['unknown', 'unavailable'] }}
         sequence:
-          - service: light.turn_off
-            target:
-              entity_id: !input lights
-          - repeat:
-              for_each: "{{ led_off_entities_var }}"
-              sequence:
-                - action: notify.send_message
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    message: >
-                      [{{ led_positions_list[repeat.index - 1]
-                          if repeat.index <= led_positions_list | count
-                          else led_positions_list[-1] }}]
-    # 全部关闭 -> 打开（场景优先）+ 点亮指示灯
-    default:
-      - choose:
-          # 选择了场景 -> 只执行场景
-          - conditions:
-              - condition: template
-                value_template: "{{ use_scene }}"
-            sequence:
-              - service: scene.turn_on
-                target:
-                  entity_id: "{{ turn_on_scene_var }}"
-        # 未选场景 -> 直接开灯
-        default:
-          - service: light.turn_on
-            target:
-              entity_id: !input lights
-      - repeat:
-          for_each: "{{ led_on_entities_var }}"
-          sequence:
-            - action: notify.send_message
-              target:
-                entity_id: "{{ repeat.item }}"
-              data:
-                message: >
-                  [{{ led_positions_list[repeat.index - 1]
-                      if repeat.index <= led_positions_list | count
-                      else led_positions_list[-1] }}]
+          - choose:
+              # 有灯开着 -> 全部关闭
+              - conditions:
+                  - condition: template
+                    value_template: "{{ any_on }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input lights
+            # 全部关闭 -> 打开（场景优先）
+            default:
+              - choose:
+                  # 选择了场景 -> 只执行场景
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ use_scene }}"
+                    sequence:
+                      - service: scene.turn_on
+                        target:
+                          entity_id: "{{ turn_on_scene_var }}"
+                # 未选场景 -> 直接开灯
+                default:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input lights
+
+      # 灯状态变化 / 启动 -> 同步指示灯
+      - conditions:
+          - condition: trigger
+            id:
+              - lights_on
+              - lights_off
+              - ha_start
+        sequence:
+          - choose:
+              # 有灯开着 -> 点亮指示灯
+              - conditions:
+                  - condition: template
+                    value_template: "{{ any_on }}"
+                sequence:
+                  - repeat:
+                      for_each: "{{ led_on_entities_var }}"
+                      sequence:
+                        - action: notify.send_message
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                          data:
+                            message: >
+                              [{{ led_positions_list[repeat.index - 1]
+                                  if repeat.index <= led_positions_list | count
+                                  else led_positions_list[-1] }}]
+            # 全部关闭 -> 熄灭指示灯
+            default:
+              - repeat:
+                  for_each: "{{ led_off_entities_var }}"
+                  sequence:
+                    - action: notify.send_message
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        message: >
+                          [{{ led_positions_list[repeat.index - 1]
+                              if repeat.index <= led_positions_list | count
+                              else led_positions_list[-1] }}]
