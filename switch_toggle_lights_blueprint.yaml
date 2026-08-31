@@ -1,7 +1,7 @@
 blueprint:
   name: 物理开关切换灯组
   description: >
-    用一个或多个物理开关（按键）单击来切换一组灯，并让指示灯始终跟随灯组状态。v1.2
+    用一个或多个物理开关（按键）单击来切换一组灯，并让指示灯始终跟随灯组状态。v1.3
 
     逻辑：
     - 单击开关：有灯开着 → 关闭所有灯；全部关闭 → 打开所有灯（可选场景）。
@@ -113,9 +113,14 @@ actions:
           - condition: trigger
             id: switch_click
           - condition: template
+            # 只在“真实单击”时执行：要求状态变化两端都是有效时间戳，
+            # 挡掉 HA 重启时 unavailable/unknown -> 时间戳 的恢复跳变，
+            # 避免重启后灯组被“幽灵按键”误切。
             value_template: >
-              {{ trigger.from_state is not none and
-                 trigger.to_state.state not in ['unknown', 'unavailable'] }}
+              {{ trigger.from_state is not none
+                 and trigger.from_state.state not in ['unknown', 'unavailable']
+                 and trigger.to_state is not none
+                 and trigger.to_state.state not in ['unknown', 'unavailable'] }}
         sequence:
           - choose:
               # 有灯开着 -> 全部关闭
